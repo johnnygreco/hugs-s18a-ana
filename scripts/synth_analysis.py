@@ -379,7 +379,13 @@ if __name__ == '__main__':
     masked |= injected_synth['mask_no_data'].values.astype(bool)
     masked |= injected_synth['mask_sat'].values.astype(bool)
     masked_frac = masked.sum()/len(injected_synth)
-    logger.info('{:.1f}% of synths masked'.format(100 * masked_frac))
+    logger.info('{:.1f}% of synths masked by HSC'.format(100 * masked_frac))
+
+    masked_frac = injected_synth['mask_small'].sum() / len(injected_synth)
+    logger.info('{:.1f}% of synths masked: SMALL'.format(100 * masked_frac))
+
+    masked_frac = injected_synth['mask_cleaned'].sum() / len(injected_synth)
+    logger.info('{:.1f}% of synths masked: CLEANED'.format(100 * masked_frac))
 
     synth_cat = synth_cat[synth_id_unique - 1]
     synth_cat = synth_cat[~masked]

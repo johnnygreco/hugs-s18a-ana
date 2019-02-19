@@ -25,13 +25,18 @@ running = 0
 no_run = 0
 no_sources = 0
 
+long_time_files = []
+
 for fn in files:
     with open(fn, 'r') as f:
         lines = f.readlines()
         complete = False
         for line in lines:
             if line.startswith('task completed'):
-                times.append(float(line.split()[-2]))
+                time = float(line.split()[-2])
+                if time > 20:
+                    long_time_files.append(fn)
+                times.append(time)
                 count += 1
                 complete = True
             elif line.startswith('***** not enough data'):
