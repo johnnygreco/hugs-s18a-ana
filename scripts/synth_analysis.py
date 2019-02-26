@@ -14,7 +14,7 @@ import hugs
 from hugs.database.tables import Source, Synth
 from hugs.log import logger
 from utils import param_dict, labels, project_dir
-from .build_catalog import get_catalog
+from build_catalog import get_catalog
 plt.style.use(os.path.join(project_dir, 'scripts/jpg.mplstyle'))
 
 

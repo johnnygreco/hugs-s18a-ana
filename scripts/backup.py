@@ -2,6 +2,9 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
+from astropy.table import Table
+import lsst.daf.persistence
+
 from hugs.utils import mkdir_if_needed
 import lsstutils
 
@@ -13,6 +16,11 @@ args = parser.parse_args()
 mkdir_if_needed(args.outdir)
 
 
+cat = Table.read(args.cat_fn)
+
+for src in cat:
+
+print(cat)
 
 
 

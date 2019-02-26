@@ -28,6 +28,9 @@ def get_catalog(db_fn, no_cuts=False):
     gi = Source.mag_ap9_g - Source.mag_ap9_i
     gr = Source.mag_ap9_g - Source.mag_ap9_r
 
+    num_sources = session.query(Source).count()
+    logger.info('{} sources in raw catalog'.format(num_sources))
+
     if no_cuts:
         query = session.query(Source)
     else:
@@ -43,16 +46,25 @@ def get_catalog(db_fn, no_cuts=False):
     logger.info('converting query to pandas dataframe')
     cat = pd.read_sql(query.statement, engine)
 
+
     hugs_r_e = cat['flux_radius_60_g'] + cat['flux_radius_65_g']
     hugs_r_e *= 0.5
     cat['flux_radius_ave_g'] = hugs_r_e
+
+    hugs_r_e = cat['flux_radius_60_i'] + cat['flux_radius_65_i']
+    hugs_r_e *= 0.5
+    cat['flux_radius_ave_i'] = hugs_r_e
 
     hugs_mu_ave = cat['mag_auto_g'].copy()
     hugs_mu_ave += 2.5 * np.log10(2*np.pi*cat['flux_radius_50_g']**2)
     cat['mu_ave_g'] = hugs_mu_ave
 
-    mu_cut = (cat['mu_ave_g'] > 22.5) & (cat['mu_ave_g'] < 29.0)
-    cat = cat[mu_cut]
+    if not no_cuts: 
+
+        mu_cut = (cat['mu_ave_g'] > 22.5) & (cat['mu_ave_g'] < 29.0)
+        ell_cut = cat['ellipticity'] < 0.75
+        cat = cat[mu_cut & ell_cut]
+        logger.info('{} sources in catalog after cuts'.format(len(cat)))
 
     return cat, session, engine
 
@@ -86,22 +98,24 @@ def get_random_subsample(cat, size):
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
-    default_synth_dir = '/tigress/jgreco/hsc-s18a/synths/global'
+    default_data_path = '/tigress/jgreco/hsc-s18a/synths/global'
 
     parser = ArgumentParser()
     parser.add_argument('--run-name', dest='run_name', required=True)
     parser.add_argument('-o', '--outfile', required=True)
-    parser.add_argument('--synth-dir', dest='synth_dir',
-                        default=default_synth_dir)
+    parser.add_argument('--data-path', dest='data_path',
+                        default=default_data_path)
     parser.add_argument('--no-cuts', dest='no_cuts', action='store_true') 
     parser.add_argument('--keep-duplicates', dest='keep_duplicates', 
                         action='store_true') 
-    parser.add_argument('--max-sep', dest='max_sep', default=0.2, type=float)
+    parser.add_argument('--max-sep', dest='max_sep', default=0.2, type=float, 
+                        help='count sources as duplicates if they are'
+                             'separated by more than this angle in arcsec.')
     parser.add_argument('--random-subsample', default=None, type=int, 
                         dest='random_subsample')
     args = parser.parse_args()
 
-    db_fn = os.path.join(args.synth_dir, args.run_name)
+    db_fn = os.path.join(args.data_path, args.run_name)
     db_fn = glob.glob(db_fn + '/*.db')[0]
 
     logger.info('using database ' + db_fn)
@@ -109,6 +123,8 @@ if __name__ == '__main__':
 
     if not args.keep_duplicates:
         remove_duplicates(hugs_cat, args.max_sep * u.arcsec)
+        logger.info(
+            '{} sources after removing duplicates'.format(len(hugs_cat)))
 
     if args.random_subsample is not None:
         hugs_cat = get_random_subsample(hugs_cat, args.random_subsample)
