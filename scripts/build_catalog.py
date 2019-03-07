@@ -98,7 +98,7 @@ def get_random_subsample(cat, size):
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
-    default_data_path = '/tigress/jgreco/hsc-s18a/synths/global'
+    default_data_path = '/tigress/jgreco/hsc-s18a/hugs-catalogs'
 
     parser = ArgumentParser()
     parser.add_argument('--run-name', dest='run_name', required=True)
@@ -113,6 +113,8 @@ if __name__ == '__main__':
                              'separated by more than this angle in arcsec.')
     parser.add_argument('--random-subsample', default=None, type=int, 
                         dest='random_subsample')
+    parser.add_argument('--xmatch-old-cat', dest='xmatch_old_cat', 
+                        action='store_true') 
     args = parser.parse_args()
 
     db_fn = os.path.join(args.data_path, args.run_name)
@@ -128,6 +130,15 @@ if __name__ == '__main__':
 
     if args.random_subsample is not None:
         hugs_cat = get_random_subsample(hugs_cat, args.random_subsample)
+
+    if args.xmatch_old_cat:
+        lsb_cat = Table.read(os.getenv('CAT_1_FN'))
+        lsb_sc = SkyCoord(lsb_cat['ra'], lsb_cat['dec'], unit='deg')
+        hugs_sc = SkyCoord(hugs_cat['ra'], hugs_cat['dec'], unit='deg')
+        _, seps, _ = lsb_sc.match_to_catalog_sky(hugs_sc)
+        num_matches = (seps.arcsec < 5.0).sum()
+        logger.info('{} out of {} matched with old catalog'.\
+                    format(num_matches, len(lsb_cat)))
 
     hugs_cat = Table.from_pandas(hugs_cat)
     hugs_cat.write(args.outfile, overwrite=True)
