@@ -113,7 +113,6 @@ if __name__=='__main__':
     parser.add_argument(
         '-o', '--output', type=str, required=True, 
         help='output file (single mode) prefix or directory (batch mode).') 
-    parser.add_argument('-f', '--filter', type=str, default='i')
     parser.add_argument(
         '-r', '--radius', type=float, default=35,
         help='angular radius of cutout in arcsec')

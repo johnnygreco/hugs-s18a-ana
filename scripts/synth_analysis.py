@@ -50,7 +50,7 @@ def match_synths(hugs_cat, synth_cat, min_sep=1.0*u.arcsec):
     diff_2 = np.abs(synth_match_12['r_e'] - hugs_match_2['flux_radius_50_i'])
     switch_match = diff_1 > diff_2
 
-    logger.warn('switching {} matches'.format(switch_match.sum()))
+    logger.warning('switching {} matches'.format(switch_match.sum()))
     mask_idx = np.argwhere(synth_mask_12)[~switch_match]
     synth_mask_12[mask_idx] = False
 
@@ -310,7 +310,13 @@ if __name__ == '__main__':
                         default=os.path.join(project_dir, 'figs'))
     parser.add_argument('--no-cuts', dest='no_cuts', action='store_true')
     parser.add_argument('--save-fn', dest='save_fn', default=None)
+    parser.add_argument('--morph-cut', dest='morph_cut', action='store_true')
     parser.add_argument('--min-sep', dest='min_sep', default=1.0, type=float)
+    parser.add_argument('--max-sep-old-cat', dest='max_sep', default=3.0, 
+                        type=float)
+    parser.add_argument('--no-plots', dest='no_plots', action='store_true')
+    parser.add_argument('--print-missed', dest='print_missed', 
+                        action='store_true')
     parser.add_argument('--fig-label', dest='fig_label', default=None)
     args = parser.parse_args()
 
@@ -318,7 +324,8 @@ if __name__ == '__main__':
         db_fn = os.path.join(args.synth_dir, args.run_name)
         db_fn = glob.glob(db_fn + '/*.db')[0]
         logger.info('using database ' + db_fn)
-        hugs_cat, session, engine = get_catalog(db_fn, args.no_cuts)
+        hugs_cat, session, engine = get_catalog(db_fn, args.no_cuts, 
+                                                args.morph_cut)
         synth_ids = get_injected_synth_ids(session=session, engine=engine)
         if args.save_fn is not None:
             logger.info('saving hugs catalog to ' + args.save_fn)
@@ -364,9 +371,22 @@ if __name__ == '__main__':
     logger.info('# of sources in catalog = {}'.format(len(hugs_cat)))
     logger.info('# of sources synths in catalog = {}'.format(len(synth_match)))
 
-    parameter_accuracy(hugs_match, synth_match, args.fig_dir, 
-                       fig_label=args.fig_label)
+    lsb_cat = Table.read(os.getenv('CAT_1_FN'))
+    lsb_sc = SkyCoord(lsb_cat['ra'], lsb_cat['dec'], unit='deg')
+    hugs_sc = SkyCoord(hugs_cat['ra'], hugs_cat['dec'], unit='deg')
+    _, seps, _ = lsb_sc.match_to_catalog_sky(hugs_sc)
+    num_matches = (seps.arcsec < args.max_sep).sum()
+    logger.info('{} out of {} matched with old catalog'.\
+                format(num_matches, len(lsb_cat)))
+    if num_matches < len(lsb_cat) and args.print_missed:
+        logger.info('missed these sources:')
+        for src in lsb_cat[seps.arcsec > args.max_sep]:
+            logger.info('cat-id = {}'.format(src['cat-id']))
 
-    completeness_grid(synth_cat, synth_match, hugs_match, 'r_e', 'mu_e_ave_g', 
-                      dbin=[0.5, 0.5], x_bin_pad=[1, 3], fig_dir=args.fig_dir, 
-                      fig_label=args.fig_label)
+    if not args.no_plots:
+        parameter_accuracy(hugs_match, synth_match, args.fig_dir, 
+                           fig_label=args.fig_label)
+
+        completeness_grid(synth_cat, synth_match, hugs_match, 'r_e', 
+                          'mu_e_ave_g', dbin=[0.5, 0.5], x_bin_pad=[1, 3], 
+                          fig_dir=args.fig_dir, fig_label=args.fig_label)

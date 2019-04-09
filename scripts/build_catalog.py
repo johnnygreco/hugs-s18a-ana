@@ -13,7 +13,7 @@ from hugs.utils import ra_dec_to_xyz, angular_dist_to_euclidean_dist
 from hugs.utils import euclidean_dist_to_angular_dist
 
 
-def get_catalog(db_fn, no_cuts=False):
+def get_catalog(db_fn, no_cuts=False, morph_cut=True):
 
     logger.info('connecting to hugs database')
     engine = hugs.database.connect(db_fn)
@@ -34,7 +34,7 @@ def get_catalog(db_fn, no_cuts=False):
     if no_cuts:
         query = session.query(Source)
     else:
-        logger.warn('applying cuts')
+        logger.warning('applying cuts')
         query = session.query(Source)\
             .filter(Source.flux_radius_65_g > size_cut_low)\
             .filter(Source.flux_radius_65_g < size_cut_high)\
@@ -64,6 +64,11 @@ def get_catalog(db_fn, no_cuts=False):
         mu_cut = (cat['mu_ave_g'] > 22.5) & (cat['mu_ave_g'] < 29.0)
         ell_cut = cat['ellipticity'] < 0.75
         cat = cat[mu_cut & ell_cut]
+
+        if morph_cut:
+            logger.info('applying morphology cuts')
+            cat = cat[cat['acorr_ratio'] < 2.5]
+
         logger.info('{} sources in catalog after cuts'.format(len(cat)))
 
     return cat, session, engine
@@ -98,7 +103,7 @@ def get_random_subsample(cat, size):
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
-    default_data_path = '/tigress/jgreco/hsc-s18a/hugs-catalogs'
+    default_data_path = '/tigress/jgreco/hsc-s18a/hugs-run'
 
     parser = ArgumentParser()
     parser.add_argument('--run-name', dest='run_name', required=True)
@@ -106,6 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--data-path', dest='data_path',
                         default=default_data_path)
     parser.add_argument('--no-cuts', dest='no_cuts', action='store_true') 
+    parser.add_argument('--morph-cut', dest='morph_cut', action='store_true') 
     parser.add_argument('--keep-duplicates', dest='keep_duplicates', 
                         action='store_true') 
     parser.add_argument('--max-sep', dest='max_sep', default=0.2, type=float, 
@@ -121,7 +127,7 @@ if __name__ == '__main__':
     db_fn = glob.glob(db_fn + '/*.db')[0]
 
     logger.info('using database ' + db_fn)
-    hugs_cat, session, engine = get_catalog(db_fn, args.no_cuts)
+    hugs_cat, session, engine = get_catalog(db_fn, args.no_cuts, args.morph_cut)
 
     if not args.keep_duplicates:
         remove_duplicates(hugs_cat, args.max_sep * u.arcsec)
