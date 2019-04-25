@@ -5,6 +5,7 @@ project_dir = os.path.dirname(os.path.dirname(__file__))
 
 param_dict = dict(
     mu_e_ave_g = 'mu_ave_g',
+    mu_e_ave_i = 'mu_ave_i',
     m_g = 'mag_auto_g',
     m_r = 'mag_auto_r',
     m_i = 'mag_auto_i',

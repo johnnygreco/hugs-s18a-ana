@@ -20,7 +20,7 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True):
     session = hugs.database.Session()
 
     size_cut_low = 2.5
-    size_cut_high = 100.0
+    size_cut_high = 1000.0
     m, b = 0.7, 0.4
 
     color_line_lo =  lambda _x: m*_x - b
@@ -54,6 +54,10 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True):
     hugs_r_e = cat['flux_radius_60_i'] + cat['flux_radius_65_i']
     hugs_r_e *= 0.5
     cat['flux_radius_ave_i'] = hugs_r_e
+    
+    hugs_mu_ave = cat['mag_auto_i'].copy()
+    hugs_mu_ave += 2.5 * np.log10(2*np.pi*cat['flux_radius_50_i']**2)
+    cat['mu_ave_i'] = hugs_mu_ave
 
     hugs_mu_ave = cat['mag_auto_g'].copy()
     hugs_mu_ave += 2.5 * np.log10(2*np.pi*cat['flux_radius_50_g']**2)

@@ -68,6 +68,10 @@ def completeness_grid(injected, recovered, measured, x_par, y_par,
                       ylim=None, fig_dir=None, fig_label=None):
     
     logger.info('making completeness grid')
+    
+    np.save('../data/injected.npy', injected)
+    np.save('../data/recovered.npy', recovered)
+
 
     if bins is None:
         bins = [np.arange(np.floor(injected[x_par].min()) -\
@@ -88,12 +92,17 @@ def completeness_grid(injected, recovered, measured, x_par, y_par,
     H_injected[H_injected==0] = 1e-8
     H_injected *= (1 - frac_masked)
     H_frac = H_measured/H_injected
+    np.save('../data/completeness-grid.npy', H_frac)
     H_frac[H_frac<1e-5] = np.nan
+
 
     x_centers = 0.5 * (bins[0][1:] + bins[0][:-1]) - 0.5*dbin[0]
     y_centers = 0.5 * (bins[1][1:] + bins[1][:-1]) - 0.5*dbin[1]
     percent = 100.0 if percent else 1.0    
     
+    np.save('../data/r_e-centers.npy', x_centers)
+    np.save('../data/mu-centers.npy', y_centers)
+
     # definitions for the axes
     left, width = 0.1, 0.65
     bottom, height = 0.1, 0.65
@@ -388,5 +397,5 @@ if __name__ == '__main__':
                            fig_label=args.fig_label)
 
         completeness_grid(synth_cat, synth_match, hugs_match, 'r_e', 
-                          'mu_e_ave_g', dbin=[0.5, 0.5], x_bin_pad=[1, 3], 
+                          'mu_e_ave_i', dbin=[0.5, 0.5], x_bin_pad=[1, 3], 
                           fig_dir=args.fig_dir, fig_label=args.fig_label)

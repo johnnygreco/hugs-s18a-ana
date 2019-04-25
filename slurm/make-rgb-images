@@ -1,0 +1,15 @@
+#! /bin/bash
+#
+#SBATCH -J rgb-images # job name
+#SBATCH -o /scratch/gpfs/jgreco/rgb-%j.out
+#SBATCH -e /scratch/gpfs/jgreco/rgb-%j.err
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=40
+#SBATCH -t 20:00:00
+#SBATCH --mail-type=begin
+#SBATCH --mail-type=end
+#SBATCH --mail-user=greco.40@osu.edu
+
+cd /tigress/jgreco/project-code/hugs-s18a-ana/scripts
+
+python make_rbg_cutouts.py -b /tigress/jgreco/hsc-s18a/hugs-run/hugs-s18a-01/catalog/hugs-s18a-01.csv -o /scratch/gpfs/jgreco/hugs-s18a-01 --ell-scale 3.0 --full-cat-fn /tigress/jgreco/hsc-s18a/hugs-run/hugs-s18a-01/catalog/hugs-s18a-01.csv --nproc 40
