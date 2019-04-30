@@ -101,7 +101,7 @@ def _mp_run(obj, extra_args):
     Q, dataRange, scale, file_format, img_size = extra_args[3:8]
     skymap, dpi, full_cat, butler = extra_args[8:]
 
-    num = obj['num']
+    num = obj['viz-id']
 
     print('source:', num)
     new_prefix = os.path.join(out_path, 'hugs-'+str(num))
@@ -128,7 +128,8 @@ def batch_rgb_images(cat_fn, radius, out_path, Q=8, dataRange=0.6, scale=20,
     print('generating {} rgb images for...'.format(len(cat)))
 
     if nproc == 1:
-        for num, obj in enumerate(cat):
+        for obj in cat:
+            num = obj['viz-id']
             print('source:', num)
             new_prefix = os.path.join(out_path, 'hugs-'+str(num))
             if ellipse_scale is not None:
@@ -147,7 +148,6 @@ def batch_rgb_images(cat_fn, radius, out_path, Q=8, dataRange=0.6, scale=20,
         ]
 
         pool_func = partial(_mp_run, extra_args=extra_args)
-        cat['num'] = np.arange(len(cat))
 
         with Pool(nproc) as pool:
             pool.map(pool_func, cat)

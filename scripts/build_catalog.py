@@ -13,7 +13,7 @@ from hugs.utils import ra_dec_to_xyz, angular_dist_to_euclidean_dist
 from hugs.utils import euclidean_dist_to_angular_dist
 
 
-def get_catalog(db_fn, no_cuts=False, morph_cut=True):
+def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
 
     logger.info('connecting to hugs database')
     engine = hugs.database.connect(db_fn)
@@ -25,8 +25,17 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True):
 
     color_line_lo =  lambda _x: m*_x - b
     color_line_hi =  lambda _x: m*_x + b
-    gi = Source.mag_ap9_g - Source.mag_ap9_i
-    gr = Source.mag_ap9_g - Source.mag_ap9_r
+
+
+    if not no_ext:
+        logger.warning('applying extinction correction to cut parameters')
+
+    A_g = 0.0 if args.no_ext else Source.A_g 
+    A_r = 0.0 if args.no_ext else Source.A_r
+    A_i = 0.0 if args.no_ext else Source.A_i
+
+    gi = Source.mag_ap9_g - Source.mag_ap9_i - (A_g - A_i)
+    gr = Source.mag_ap9_g - Source.mag_ap9_r - (A_g - A_r)
 
     num_sources = session.query(Source).count()
     logger.info('{} sources in raw catalog'.format(num_sources))
@@ -38,6 +47,9 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True):
         query = session.query(Source)\
             .filter(Source.flux_radius_65_g > size_cut_low)\
             .filter(Source.flux_radius_65_g < size_cut_high)\
+            .filter(Source.flux_radius_50_g > 0)\
+            .filter(Source.flux_radius_50_r > 0)\
+            .filter(Source.flux_radius_50_i > 0)\
             .filter(gi > -0.1)\
             .filter(gi < 1.4)\
             .filter(color_line_lo(gi) < gr)\
@@ -46,7 +58,6 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True):
     logger.info('converting query to pandas dataframe')
     cat = pd.read_sql(query.statement, engine)
 
-
     hugs_r_e = cat['flux_radius_60_g'] + cat['flux_radius_65_g']
     hugs_r_e *= 0.5
     cat['flux_radius_ave_g'] = hugs_r_e
@@ -54,14 +65,20 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True):
     hugs_r_e = cat['flux_radius_60_i'] + cat['flux_radius_65_i']
     hugs_r_e *= 0.5
     cat['flux_radius_ave_i'] = hugs_r_e
+
+    A_g = 0.0 if args.no_ext else cat['A_g']
+    A_i = 0.0 if args.no_ext else cat['A_i']
     
     hugs_mu_ave = cat['mag_auto_i'].copy()
     hugs_mu_ave += 2.5 * np.log10(2*np.pi*cat['flux_radius_50_i']**2)
-    cat['mu_ave_i'] = hugs_mu_ave
+    cat['mu_ave_i'] = hugs_mu_ave - A_i
 
     hugs_mu_ave = cat['mag_auto_g'].copy()
     hugs_mu_ave += 2.5 * np.log10(2*np.pi*cat['flux_radius_50_g']**2)
-    cat['mu_ave_g'] = hugs_mu_ave
+    cat['mu_ave_g'] = hugs_mu_ave - A_g
+
+    cat['g-i'] = cat['mag_ap9_g'] - cat['mag_ap9_i'] - (A_g - A_i)
+    cat['g-r'] = cat['mag_ap9_g'] - cat['mag_ap9_r'] - (A_g - A_r)
 
     if not no_cuts: 
 
@@ -125,13 +142,20 @@ if __name__ == '__main__':
                         dest='random_subsample')
     parser.add_argument('--xmatch-old-cat', dest='xmatch_old_cat', 
                         action='store_true') 
+    parser.add_argument('--viz-inspect-cat', dest='viz_cat', 
+                        action='store_true')
+    parser.add_argument('--no-extinction', dest='no_ext', 
+                        action='store_true')
     args = parser.parse_args()
 
     db_fn = os.path.join(args.data_path, args.run_name)
     db_fn = glob.glob(db_fn + '/*.db')[0]
 
     logger.info('using database ' + db_fn)
-    hugs_cat, session, engine = get_catalog(db_fn, args.no_cuts, args.morph_cut)
+    hugs_cat, session, engine = get_catalog(db_fn, 
+                                            args.no_cuts, 
+                                            args.morph_cut, 
+                                            args.no_ext)
 
     if not args.keep_duplicates:
         remove_duplicates(hugs_cat, args.max_sep * u.arcsec)
@@ -151,4 +175,28 @@ if __name__ == '__main__':
                     format(num_matches, len(lsb_cat)))
 
     hugs_cat = Table.from_pandas(hugs_cat)
+    
+    if args.viz_cat:
+        _cols = ['ra', 
+                 'dec',  
+                 'a_image',
+                 'b_image',
+                 'theta_image',
+                 'ellipticity',
+                 'mag_auto_g',
+                 'mag_auto_r',
+                 'mag_auto_i',
+                 'flux_radius_ave_g',
+                 'flux_radius_ave_i',
+                 'mu_ave_g',
+                 'mu_ave_i',
+                 'acorr_ratio',
+                 'g-i', 
+                 'g-r', 
+                 'A_g', 
+                 'A_r', 
+                 'A_i']
+        hugs_cat = hugs_cat[_cols]
+        hugs_cat['viz-id'] = np.arange(1, len(hugs_cat) + 1)
+
     hugs_cat.write(args.outfile, overwrite=True)
