@@ -67,6 +67,7 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
     cat['flux_radius_ave_i'] = hugs_r_e
 
     A_g = 0.0 if args.no_ext else cat['A_g']
+    A_r = 0.0 if args.no_ext else cat['A_r']
     A_i = 0.0 if args.no_ext else cat['A_i']
     
     hugs_mu_ave = cat['mag_auto_i'].copy()
