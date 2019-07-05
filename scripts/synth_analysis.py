@@ -14,7 +14,7 @@ import hugs
 from hugs.database.tables import Source, Synth
 from hugs.log import logger
 from utils import param_dict, labels, project_dir
-from build_catalog import get_catalog
+from build_catalog import get_catalog, remove_duplicates
 plt.style.use(os.path.join(project_dir, 'scripts/jpg.mplstyle'))
 
 
@@ -280,6 +280,22 @@ def parameter_accuracy(hugs_cat, synth_cat, fig_dir, fontsize=22,
     f2.savefig(fn_2, dpi=200)
 
 
+def plot_neighbor_distribution(cat, fig_dir, fig_label=None, nn=8):
+    sc = SkyCoord(cat['ra'], cat['dec'], unit='deg')
+    idx, sep, _ = sc.match_to_catalog_sky(sc, nn)
+
+    fig, ax = plt.subplots()
+
+    ax.hist(sep.arcmin, bins='auto')
+    ax.set_xlabel('Distance to {}th Nearest Neighbor [arcmin]'.format(nn),  
+                  fontsize=20)
+
+    fig_label = fig_label if fig_label is not None else ''
+
+    fn = os.path.join(fig_dir, fig_label + 'nn-hist.png')
+    fig.savefig(fn, dpi=200)
+
+
 def get_injected_synth_ids(db_fn=None, session=None, engine=None):
 
     if db_fn is not None:
@@ -314,10 +330,11 @@ if __name__ == '__main__':
                         default=default_synth_dir)
     parser.add_argument(
         '--synth-cat-fn', dest='synth_cat_fn', 
-        default=os.path.join(default_synth_dir, 'global-synth-cat.fits'))
+        default=os.path.join(default_synth_dir, 'global-synths-median.fits'))
     parser.add_argument('--fig-dir', dest='fig_dir', 
                         default=os.path.join(project_dir, 'figs'))
     parser.add_argument('--no-cuts', dest='no_cuts', action='store_true')
+    parser.add_argument('--nn', default=8, type=int) 
     parser.add_argument('--save-fn', dest='save_fn', default=None)
     parser.add_argument('--morph-cut', dest='morph_cut', action='store_true')
     parser.add_argument('--min-sep', dest='min_sep', default=1.0, type=float)
@@ -334,16 +351,19 @@ if __name__ == '__main__':
         db_fn = glob.glob(db_fn + '/*.db')[0]
         logger.info('using database ' + db_fn)
         hugs_cat, session, engine = get_catalog(db_fn, args.no_cuts, 
-                                                args.morph_cut)
+                                                args.morph_cut, no_ext=True)
+        remove_duplicates(hugs_cat, 0.2 * u.arcsec)
+        logger.info('{} sources after removing duplicates'.\
+                    format(len(hugs_cat)))
         synth_ids = get_injected_synth_ids(session=session, engine=engine)
         if args.save_fn is not None:
             logger.info('saving hugs catalog to ' + args.save_fn)
-            hugs_cat.to_csv(args.save_fn)
+            hugs_cat.to_csv(args.save_fn, index=False)
             fn = args.save_fn[:-4] + '-synth-ids.csv'
             logger.info('saving synth id catalog to ' + fn)
-            synth_ids.to_csv(fn)
+            synth_ids.to_csv(fn, index=False)
     else:
-        hugs_cat = pd.read_csv(args.cat_fn)
+        hugs_cat = pd.read_csv(args.cat_fn, )
         fn = args.cat_fn[:-4] + '-synth-ids.csv'
         synth_ids = pd.read_csv(fn)
 
@@ -396,6 +416,9 @@ if __name__ == '__main__':
         parameter_accuracy(hugs_match, synth_match, args.fig_dir, 
                            fig_label=args.fig_label)
 
+        plot_neighbor_distribution(hugs_cat, args.fig_dir, 
+                                   args.fig_label, nn=args.nn)
+
         completeness_grid(synth_cat, synth_match, hugs_match, 'r_e', 
-                          'mu_e_ave_i', dbin=[0.5, 0.5], x_bin_pad=[1, 3], 
+                          'mu_e_ave_g', dbin=[0.5, 0.5], x_bin_pad=[1, 3], 
                           fig_dir=args.fig_dir, fig_label=args.fig_label)

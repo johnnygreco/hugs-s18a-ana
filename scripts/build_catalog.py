@@ -7,10 +7,9 @@ from astropy.coordinates import SkyCoord
 from astropy.table import Table
 
 import hugs
-from hugs.database.tables import Source
+from hugs.database.tables import Source, Tract, Patch
 from hugs.log import logger
 from hugs.utils import ra_dec_to_xyz, angular_dist_to_euclidean_dist
-from hugs.utils import euclidean_dist_to_angular_dist
 
 
 def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
@@ -30,9 +29,9 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
     if not no_ext:
         logger.warning('applying extinction correction to cut parameters')
 
-    A_g = 0.0 if args.no_ext else Source.A_g 
-    A_r = 0.0 if args.no_ext else Source.A_r
-    A_i = 0.0 if args.no_ext else Source.A_i
+    A_g = 0.0 if no_ext else Source.A_g 
+    A_r = 0.0 if no_ext else Source.A_r
+    A_i = 0.0 if no_ext else Source.A_i
 
     gi = Source.mag_ap9_g - Source.mag_ap9_i - (A_g - A_i)
     gr = Source.mag_ap9_g - Source.mag_ap9_r - (A_g - A_r)
@@ -42,18 +41,25 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
 
     if no_cuts:
         query = session.query(Source)
+        query = session.query(Tract.hsc_id.label('tract'), 
+                              Patch.hsc_id.label('patch'), Source).\
+                              join(Patch, Patch.tract_id==Tract.id).\
+                              join(Source, Source.patch_id==Patch.id)
     else:
         logger.warning('applying cuts')
-        query = session.query(Source)\
-            .filter(Source.flux_radius_65_g > size_cut_low)\
-            .filter(Source.flux_radius_65_g < size_cut_high)\
-            .filter(Source.flux_radius_50_g > 0)\
-            .filter(Source.flux_radius_50_r > 0)\
-            .filter(Source.flux_radius_50_i > 0)\
-            .filter(gi > -0.1)\
-            .filter(gi < 1.4)\
-            .filter(color_line_lo(gi) < gr)\
-            .filter(color_line_hi(gi) > gr)
+        query = session.query(Tract.hsc_id.label('tract'), 
+                              Patch.hsc_id.label('patch'), Source).\
+                              join(Patch, Patch.tract_id==Tract.id).\
+                              join(Source, Source.patch_id==Patch.id).\
+                              filter(Source.flux_radius_65_g > size_cut_low).\
+                              filter(Source.flux_radius_65_g < size_cut_high).\
+                              filter(Source.flux_radius_50_g > 0).\
+                              filter(Source.flux_radius_50_r > 0).\
+                              filter(Source.flux_radius_50_i > 0).\
+                              filter(gi > -0.1).\
+                              filter(gi < 1.4).\
+                              filter(color_line_lo(gi) < gr).\
+                              filter(color_line_hi(gi) > gr)
 
     logger.info('converting query to pandas dataframe')
     cat = pd.read_sql(query.statement, engine)
@@ -66,9 +72,9 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
     hugs_r_e *= 0.5
     cat['flux_radius_ave_i'] = hugs_r_e
 
-    A_g = 0.0 if args.no_ext else cat['A_g']
-    A_r = 0.0 if args.no_ext else cat['A_r']
-    A_i = 0.0 if args.no_ext else cat['A_i']
+    A_g = 0.0 if no_ext else cat['A_g']
+    A_r = 0.0 if no_ext else cat['A_r']
+    A_i = 0.0 if no_ext else cat['A_i']
     
     hugs_mu_ave = cat['mag_auto_i'].copy()
     hugs_mu_ave += 2.5 * np.log10(2*np.pi*cat['flux_radius_50_i']**2)
@@ -81,6 +87,12 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
     cat['g-i'] = cat['mag_ap9_g'] - cat['mag_ap9_i'] - (A_g - A_i)
     cat['g-r'] = cat['mag_ap9_g'] - cat['mag_ap9_r'] - (A_g - A_r)
 
+    # HACK: not sure why the tracts aren't integers
+    tracts = []
+    for t in cat['tract']:
+        tracts.append(np.frombuffer(t, np.int64)[0])
+    cat['tract'] = tracts
+
     if not no_cuts: 
 
         mu_cut = (cat['mu_ave_g'] > 22.5) & (cat['mu_ave_g'] < 29.0)
@@ -90,6 +102,8 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False):
         if morph_cut:
             logger.info('applying morphology cuts')
             cat = cat[cat['acorr_ratio'] < 2.5]
+        else:
+            logger.warn('not applying morphology cuts; is this what you want?')
 
         logger.info('{} sources in catalog after cuts'.format(len(cat)))
 
