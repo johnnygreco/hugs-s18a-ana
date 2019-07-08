@@ -333,6 +333,9 @@ if __name__ == '__main__':
         default=os.path.join(default_synth_dir, 'global-synths-median.fits'))
     parser.add_argument('--fig-dir', dest='fig_dir', 
                         default=os.path.join(project_dir, 'figs'))
+    parser.add_argument('--nsa-cut', dest='nsa_cut', action='store_true')
+    parser.add_argument('--nsa-min-mass', default=1e10, type=float)
+    parser.add_argument('--nsa-rad-frac', default=5, type=int)
     parser.add_argument('--no-cuts', dest='no_cuts', action='store_true')
     parser.add_argument('--nn', default=8, type=int) 
     parser.add_argument('--save-fn', dest='save_fn', default=None)
@@ -350,8 +353,14 @@ if __name__ == '__main__':
         db_fn = os.path.join(args.synth_dir, args.run_name)
         db_fn = glob.glob(db_fn + '/*.db')[0]
         logger.info('using database ' + db_fn)
-        hugs_cat, session, engine = get_catalog(db_fn, args.no_cuts, 
-                                                args.morph_cut, no_ext=True)
+        hugs_cat, session, engine = get_catalog(db_fn,
+                                                args.no_cuts,
+                                                args.morph_cut,
+                                                True,
+                                                args.nsa_cut,
+                                                args.nsa_min_mass,
+                                                args.nsa_rad_frac) 
+                                               
         remove_duplicates(hugs_cat, 0.2 * u.arcsec)
         logger.info('{} sources after removing duplicates'.\
                     format(len(hugs_cat)))
