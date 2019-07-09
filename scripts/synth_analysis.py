@@ -11,7 +11,7 @@ from astropy.coordinates import SkyCoord
 from astropy import units as u
 
 import hugs
-from hugs.database.tables import Source, Synth
+from hugs.database.tables import Source, Synth, Tract, Patch
 from hugs.log import logger
 from utils import param_dict, labels, project_dir
 from build_catalog import get_catalog, remove_duplicates
@@ -305,8 +305,17 @@ def get_injected_synth_ids(db_fn=None, session=None, engine=None):
     else:
         assert session is not None and engine is not None
 
-    query = session.query(Synth)
+    query = session.query(Tract.hsc_id.label('tract'),
+                          Patch.hsc_id.label('patch'), Synth).\
+                          join(Patch, Patch.tract_id==Tract.id).\
+                          join(Synth, Synth.patch_id==Patch.id) 
     synth_ids = pd.read_sql(query.statement, engine)
+
+    # HACK: not sure why the tracts aren't integers
+    tracts = []
+    for t in synth_ids['tract']:
+        tracts.append(np.frombuffer(t, np.int64)[0])
+    synth_ids['tract'] = tracts
 
     return synth_ids
 
@@ -334,6 +343,7 @@ if __name__ == '__main__':
     parser.add_argument('--fig-dir', dest='fig_dir', 
                         default=os.path.join(project_dir, 'figs'))
     parser.add_argument('--nsa-cut', dest='nsa_cut', action='store_true')
+    parser.add_argument('--cirrus-cut', action='store_true')
     parser.add_argument('--nsa-min-mass', default=1e10, type=float)
     parser.add_argument('--nsa-rad-frac', default=5, type=int)
     parser.add_argument('--no-cuts', dest='no_cuts', action='store_true')
@@ -353,18 +363,27 @@ if __name__ == '__main__':
         db_fn = os.path.join(args.synth_dir, args.run_name)
         db_fn = glob.glob(db_fn + '/*.db')[0]
         logger.info('using database ' + db_fn)
-        hugs_cat, session, engine = get_catalog(db_fn,
-                                                args.no_cuts,
-                                                args.morph_cut,
-                                                True,
-                                                args.nsa_cut,
-                                                args.nsa_min_mass,
-                                                args.nsa_rad_frac) 
+        hugs_cat, session, engine, cirrus_patches = get_catalog(
+            db_fn, args.no_cuts, args.morph_cut, True, args.nsa_cut,
+            args.nsa_min_mass, args.nsa_rad_frac, args.cirrus_cut) 
                                                
         remove_duplicates(hugs_cat, 0.2 * u.arcsec)
         logger.info('{} sources after removing duplicates'.\
                     format(len(hugs_cat)))
         synth_ids = get_injected_synth_ids(session=session, engine=engine)
+
+        if args.cirrus_cut:
+            num_before = len(synth_ids)
+            synth_ids = synth_ids.set_index(['tract', 'patch']).\
+                drop(cirrus_patches.index, errors='ignore')
+            synth_ids.reset_index(inplace=True)
+            num_after = len(synth_ids)
+            logger.info('cirrus patch cut removed {} synths'.\
+                format(num_before - num_after))
+
+        num_patches = len(hugs_cat.groupby(['tract', 'patch'])['id'].count())
+        logger.info('{} patches remain after all cuts'.format(num_patches))
+
         if args.save_fn is not None:
             logger.info('saving hugs catalog to ' + args.save_fn)
             hugs_cat.to_csv(args.save_fn, index=False)
@@ -372,7 +391,7 @@ if __name__ == '__main__':
             logger.info('saving synth id catalog to ' + fn)
             synth_ids.to_csv(fn, index=False)
     else:
-        hugs_cat = pd.read_csv(args.cat_fn, )
+        hugs_cat = pd.read_csv(args.cat_fn, index=False)
         fn = args.cat_fn[:-4] + '-synth-ids.csv'
         synth_ids = pd.read_csv(fn)
 

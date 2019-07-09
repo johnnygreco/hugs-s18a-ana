@@ -16,7 +16,8 @@ from hugs.utils import ra_dec_to_xyz, angular_dist_to_euclidean_dist
 
 
 def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False, 
-                nsa_cut=False, nsa_min_mass=1e10, nsa_rad_factor=5):
+                nsa_cut=False, nsa_min_mass=1e10, nsa_rad_factor=5, 
+                cirrus_cut=False, max_sources=50, max_A_g=0.3):
 
     logger.info('connecting to hugs database')
     engine = hugs.database.connect(db_fn)
@@ -138,10 +139,38 @@ def get_catalog(db_fn, no_cuts=False, morph_cut=True, no_ext=False,
         else:
             logger.warn('not applying nsa galaxy cut; is this what you want?')
 
+        if cirrus_cut:
+            logger.info('applying cirrus cut with N_max = {} and Ag_max = {}'.\
+                         format(max_sources, max_A_g))
 
+            num_patches_0 = len(cat.groupby(['tract', 'patch'])['id'].count())
+            logger.info('{} patches before cirrus cut'.format(num_patches_0))
+
+            cut_func = lambda _x: (_x['A_g'].median() >= max_A_g) |\
+                                  (_x['id'].count() >= max_sources)      
+
+            cirrus_patches = cat.groupby(['tract', 'patch']).\
+                                         filter(cut_func).\
+                                         groupby(['tract', 'patch'])
+
+            cirrus_patches = cirrus_patches[['ra', 'dec', 'A_g']].agg('median')
+            cat = cat.set_index(['tract', 'patch']).drop(cirrus_patches.index)
+            cat.reset_index(inplace=True)
+
+            num_patches = len(cat.groupby(['tract', 'patch'])['id'].count())
+
+            logger.info('removed {} patches with cirrus cut'.\
+                format(num_patches_0 - num_patches))
+
+        else:
+            logger.warn('not applying cirrus cut; is this what you want?')
+            num_patches = len(cat.groupby(['tract', 'patch'])['id'].count())
+            cirrus_patches = None
+
+        logger.info('searched {} patches'.format(num_patches))
         logger.info('{} sources in catalog after cuts'.format(len(cat)))
 
-    return cat, session, engine
+    return cat, session, engine, cirrus_patches
 
 
 def remove_duplicates(cat, max_sep=0.2*u.arcsec):
