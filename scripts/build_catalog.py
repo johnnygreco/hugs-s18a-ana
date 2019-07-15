@@ -227,19 +227,27 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--no-extinction', dest='no_ext', 
                         action='store_true')
+    parser.add_argument('--save-patch-fn', default=None)
+    parser.add_argument('--cirrus-cut', action='store_true')
     args = parser.parse_args()
 
     db_fn = os.path.join(args.data_path, args.run_name)
     db_fn = glob.glob(db_fn + '/*.db')[0]
 
     logger.info('using database ' + db_fn)
-    hugs_cat, session, engine = get_catalog(db_fn, 
-                                            args.no_cuts, 
-                                            args.morph_cut, 
-                                            args.no_ext, 
-                                            args.nsa_cut, 
-                                            args.nsa_min_mass, 
-                                            args.nsa_rad_frac)
+    hugs_cat, session, engine, _ = get_catalog(
+        db_fn, args.no_cuts, args.morph_cut, args.no_ext, 
+        args.nsa_cut, args.nsa_min_mass, args.nsa_rad_frac, 
+        args.cirrus_cut)
+
+    if args.save_patch_fn is not None:
+        logger.info('writing used patches to ' + args.save_patch_fn)
+        tp = hugs_cat.groupby(['tract', 'patch'])['id'].count().index.values
+        tp = tp.tolist()
+        tract = [t[0] for t  in tp]
+        patch = [p[1] for p  in tp]
+        Table([tract, patch], names=['tract', 'patch']).write(
+        args.save_patch_fn, overwrite=True)
 
     if not args.keep_duplicates:
         remove_duplicates(hugs_cat, args.max_sep * u.arcsec)
@@ -279,7 +287,9 @@ if __name__ == '__main__':
                  'g-r', 
                  'A_g', 
                  'A_r', 
-                 'A_i']
+                 'A_i',
+                 'tract', 
+                 'patch']
         hugs_cat = hugs_cat[_cols]
         hugs_cat['viz-id'] = np.arange(1, len(hugs_cat) + 1)
 
