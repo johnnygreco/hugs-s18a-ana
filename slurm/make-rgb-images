@@ -12,4 +12,6 @@
 
 cd /tigress/jgreco/project-code/hugs-s18a-ana/scripts
 
-python make_rbg_cutouts.py -b /tigress/jgreco/hsc-s18a/hugs-run/hugs-s18a-01/catalog/hugs-s18a-01-vizinspect.csv -o /scratch/gpfs/jgreco/hugs-s18a-01-vizinspect --ell-scale 3.0 --full-cat-fn /tigress/jgreco/hsc-s18a/hugs-run/hugs-s18a-01/catalog/hugs-s18a-01-vizinspect.csv --nproc 40
+RUN=02
+
+python make_rbg_cutouts.py -b /tigress/jgreco/hsc-s18a/hugs-run/hugs-s18a-$RUN/catalog/hugs-s18a-$RUN-vizinspect.csv -o /scratch/gpfs/jgreco/hugs-s18a-$RUN-vizinspect --ell-scale 3.0 --full-cat-fn /tigress/jgreco/hsc-s18a/hugs-run/hugs-s18a-$RUN/catalog/hugs-s18a-$RUN-vizinspect.csv --nproc 40

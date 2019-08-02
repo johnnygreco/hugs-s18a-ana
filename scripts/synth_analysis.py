@@ -152,10 +152,10 @@ def completeness_grid(injected, recovered, measured, x_par, y_par,
                  alpha=1, histtype='step', lw=3, orientation='horizontal')
 
     axHistx.set(xticklabels=[], xticks=ax.get_xticks(), xlim=ax.get_xlim(), 
-                ylim=(0, 16000))
+                ylim=(0, 10000))
     axHistx.set_ylabel('Number')
     axHisty.set(yticklabels=[], yticks=ax.get_yticks() ,ylim=ax.get_ylim(), 
-                xlim=(0, 20000))
+                xlim=(0, 16000))
     axHisty.set_xlabel('Number')
     axHistx.minorticks_on()
     axHisty.minorticks_on()
@@ -330,16 +330,14 @@ def _get_unique_synths(synth_ids):
 
 if __name__ == '__main__':
     
-    default_synth_dir = '/tigress/jgreco/hsc-s18a/synths/global'
+    default_run_dir = '/tigress/jgreco/hsc-s18a/synths/global/'
     parser = ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--run-name', dest='run_name')
     group.add_argument('--cat-fn', dest='cat_fn', default=None)
-    parser.add_argument('--synth-dir', dest='synth_dir', 
-                        default=default_synth_dir)
-    parser.add_argument(
-        '--synth-cat-fn', dest='synth_cat_fn', 
-        default=os.path.join(default_synth_dir, 'global-synths-median.fits'))
+    parser.add_argument('--synth-cat-fn', required=True)
+    parser.add_argument('--run-dir', dest='run_dir', 
+                        default=default_run_dir)
     parser.add_argument('--fig-dir', dest='fig_dir', 
                         default=os.path.join(project_dir, 'figs'))
     parser.add_argument('--nsa-cut', dest='nsa_cut', action='store_true')
@@ -347,7 +345,7 @@ if __name__ == '__main__':
     parser.add_argument('--nsa-min-mass', default=1e10, type=float)
     parser.add_argument('--nsa-rad-frac', default=5, type=int)
     parser.add_argument('--no-cuts', dest='no_cuts', action='store_true')
-    parser.add_argument('--nn', default=8, type=int) 
+    parser.add_argument('--nn', default=5, type=int) 
     parser.add_argument('--save-fn', dest='save_fn', default=None)
     parser.add_argument('--morph-cut', dest='morph_cut', action='store_true')
     parser.add_argument('--min-sep', dest='min_sep', default=1.0, type=float)
@@ -360,7 +358,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.cat_fn is None:
-        db_fn = os.path.join(args.synth_dir, args.run_name)
+        db_fn = os.path.join(args.run_dir, args.run_name)
         db_fn = glob.glob(db_fn + '/*.db')[0]
         logger.info('using database ' + db_fn)
         hugs_cat, session, engine, cirrus_patches = get_catalog(
@@ -439,6 +437,13 @@ if __name__ == '__main__':
         logger.info('missed these sources:')
         for src in lsb_cat[seps.arcsec > args.max_sep]:
             logger.info('cat-id = {}'.format(src['cat-id']))
+    
+    path = '../data/synth-results/'
+    label = '-'.join(args.run_name.split('-')[-2:])
+    label = '-{}.csv'.format(label)
+    synth_cat.write(path + 'synth-cat' + label, overwrite=True)
+    hugs_match.write(path + 'hugs-match' + label, overwrite=True)
+    synth_match.write(path + 'synth-match' + label, overwrite=True)
 
     if not args.no_plots:
         parameter_accuracy(hugs_match, synth_match, args.fig_dir, 
@@ -448,5 +453,6 @@ if __name__ == '__main__':
                                    args.fig_label, nn=args.nn)
 
         completeness_grid(synth_cat, synth_match, hugs_match, 'r_e', 
-                          'mu_e_ave_g', dbin=[0.5, 0.5], x_bin_pad=[1, 3], 
-                          fig_dir=args.fig_dir, fig_label=args.fig_label)
+                          'mu_e_ave_g', dbin=[1.0, 0.5], x_bin_pad=[1, 3], 
+                          y_bin_pad=[0, 3], fig_dir=args.fig_dir, 
+                          fig_label=args.fig_label)

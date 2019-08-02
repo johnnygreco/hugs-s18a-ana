@@ -7,10 +7,13 @@ matplotlib.use('agg')
 from matplotlib.patches import Ellipse
 import matplotlib.pyplot as plt
 from  multiprocessing import Pool
+from matplotlib.colors import SymLogNorm
 from functools import partial
 from astropy.table import Table
+from astropy.visualization import ZScaleInterval
 from astropy import units as u
 plt.style.use('jpg.mplstyle')
+zscale = ZScaleInterval(contrast=0.7)
 
 import lsst.log
 Log = lsst.log.Log()
@@ -41,6 +44,67 @@ def _draw_ellipse(ra, dec, ell_pars, wcs, ax, color='c', dx=0, dy=0, **kwargs):
     ax.add_patch(e)
 
 
+def _check_radius_unit(radius):
+    if type(radius) != u.Quantity:
+        radius *= u.arcsec
+    return radius
+
+
+def make_main_image(img, wcs, radius, prefix, ra, dec, 
+                    ell_pars=None, dx=0, dy=0, 
+                    full_cat=None, single_band=None, 
+                    subplots=None, scale=True, ell_scale=1):
+
+    if subplots is None:
+        fig, ax = plt.subplots(
+            subplot_kw={'yticks':[], 'xticks':[]})
+    else:
+        fig, ax = subplots
+
+    if len(img.shape) == 3:
+        ax.imshow(img, origin='lower')
+        scale_color = 'w'
+    else:
+        vmin, vmax = np.percentile(img, [1, 99])
+        ax.imshow(img, vmin=vmin, vmax=vmax, origin='lower', cmap='gray_r')
+        ax.text(0.87, 0.91, single_band, transform=ax.transAxes, 
+                color='tab:red', fontsize=22)
+        scale_color = 'tab:red'
+
+    if scale:
+        shape = img.shape
+        xmin = 15.0
+        xmax = xmin + scale/0.168
+        y=0.93*shape[0]
+        ax.axhline(y=y, xmin=xmin/shape[1], xmax=xmax/shape[1], 
+                   color=scale_color, lw=3.0, zorder=1000)
+        label = str(int(scale))
+        ax.text((xmin+xmax)/2 - 0.042*shape[1], y - 0.072*shape[0], 
+                r'$'+label+'^{\prime\prime}$', color=scale_color, 
+                fontsize=20)
+
+    if ell_pars is not None:
+        _draw_ellipse(ra, dec, ell_pars, wcs, ax, dx=dx, dy=dy, 
+                      alpha=0.8, zorder=100)
+
+    if full_cat is not None and ell_scale is not None:
+        radius = _check_radius_unit(radius)
+        #ra_c, dec_c = wcs.getSkyOrigin()
+        #ra_c = ra_c.asDegrees()
+        #dec_c = dec_c.asDegrees()
+        seps = angsep(ra, dec, full_cat['ra'], full_cat['dec']) 
+
+        src_cut= (seps < 2 * radius.to('arcsec').value) & (seps > 0)
+        sources = full_cat[src_cut]
+        for src in sources:
+            ell_pars = src['flux_radius_ave_g'], src['theta_image'],\
+                       src['ellipticity'], ell_scale
+            _draw_ellipse(src['ra'], src['dec'], ell_pars, wcs, ax, dx=dx, 
+                          dy=dy, color='lightgray', alpha=0.7, zorder=10)
+
+
+
+
 def single_rgb_image(ra, dec, radius, prefix, Q=8., dataRange=0.6, scale=20, 
                      file_format='png', img_size=None, butler=None, 
                      skymap=None, root=ROOT, dpi=150, ell_pars=None, 
@@ -56,6 +120,8 @@ def single_rgb_image(ra, dec, radius, prefix, Q=8., dataRange=0.6, scale=20,
             butler=butler, skymap=skymap, img_size=img_size, 
             return_wcs=True, root=root)
         dx, dy = 0, 0
+        bw_image = stamps[0].getImage().getArray()
+        single_band = 'i'
     except: 
         print('WARNING: failed to make rgb image {} at {}, {} | {} {}'.\
             format(prefix, ra, dec, tract, patch))
@@ -65,8 +131,7 @@ def single_rgb_image(ra, dec, radius, prefix, Q=8., dataRange=0.6, scale=20,
         success = False
 
         if (tract is not None) and (patch is not None):
-            if type(radius) != u.Quantity:
-                radius *= u.arcsec
+            radius = _check_radius_unit(radius)
 
             size = int(radius.to('arcsec').value/pixscale) 
             stamp_shape = (size * 2 + 1, size * 2 + 1)
@@ -102,6 +167,8 @@ def single_rgb_image(ra, dec, radius, prefix, Q=8., dataRange=0.6, scale=20,
                 dx -= stamp_shape[0] * 0.5
                 dy -= stamp_shape[0] * 0.5
                 success = True
+                bw_image = rgb_stamps[0].getImage().getArray()
+                single_band = 'i'
             elif len(exposures) > 0:
                 cutout = exposures[0].getCutout(coord, extent)
                 nanpix = np.isnan(cutout.getImage().getArray())
@@ -116,6 +183,7 @@ def single_rgb_image(ra, dec, radius, prefix, Q=8., dataRange=0.6, scale=20,
                 single_band = cutout.getFilter().getName()
                 # some bands have numbers --> get the relevant letter
                 single_band = [b for b in single_band if b in 'gri'][0]
+                bw_image = cutout.getImage().getArray()
                 success = True
             else:
                 print('WARNING: patch cutout failed for {}'\
@@ -130,6 +198,7 @@ def single_rgb_image(ra, dec, radius, prefix, Q=8., dataRange=0.6, scale=20,
                 img = stamp.getImage().getArray()
                 wcs = stamp.getWcs()
                 single_band = bands[count]
+                bw_image = stamp.getImage().getArray()
                 dx, dy = 0, 0
                 success = True
             except:
@@ -143,55 +212,40 @@ def single_rgb_image(ra, dec, radius, prefix, Q=8., dataRange=0.6, scale=20,
         if not success:
             return None
 
-    if img is not None:
+    if img is None:
+        print('WARNING: img = None for {} at {}, {}'.\
+              format(prefix, ra, dec))
+        return None
+    else:
+        kws = dict(xticks=[], yticks=[], aspect='equal')
+        fig = plt.figure(figsize=(10, 6.5))
+        fig.subplots_adjust(wspace=0.0, hspace=0.05)
+        ax1 = fig.add_subplot(plt.subplot2grid((2, 3), (0, 0), 2, 2, **kws))
+        ax2 = fig.add_subplot(plt.subplot2grid((2, 3), (0, 2), 1, 1, **kws))
+        ax3 = fig.add_subplot(plt.subplot2grid((2, 3), (1, 2), 1, 1, **kws))
+        
+        make_main_image(img, wcs, radius, prefix, ra, dec, ell_pars, dx, dy,
+                        full_cat, single_band, (fig, ax1), scale, 
+                        ell_scale=ell_scale)
 
-        fig, ax = plt.subplots(
-            subplot_kw={'yticks':[], 'xticks':[]})
+        bw_image[np.isnan(bw_image)] = 0.0
+            
+        vmin, vmax = np.percentile(bw_image, [0.1, 99.9])
+        ax2.imshow(bw_image, origin='lower', cmap='gray_r',
+                   norm=SymLogNorm(linthresh=0.1, vmin=vmin, vmax=vmax))
 
-        if len(img.shape) == 3:
-            ax.imshow(img, origin='lower')
-            scale_color = 'w'
-        else:
-            vmin, vmax = np.percentile(img, [1, 99])
-            ax.imshow(img, vmin=vmin, vmax=vmax, origin='lower', cmap='gray_r')
-            ax.text(0.87, 0.91, single_band, transform=ax.transAxes, 
-                    color='tab:red', fontsize=22)
-            scale_color = 'tab:red'
+        vmin, vmax = zscale.get_limits(bw_image)
 
-        if scale:
-            shape = img.shape
-            xmin = 15.0
-            xmax = xmin + scale/0.168
-            y=0.93*shape[0]
-            ax.axhline(y=y, xmin=xmin/shape[1], xmax=xmax/shape[1], 
-                       color=scale_color, lw=3.0, zorder=1000)
-            label = str(int(scale))
-            ax.text((xmin+xmax)/2 - 0.042*shape[1], y - 0.072*shape[0], 
-                    r'$'+label+'^{\prime\prime}$', color=scale_color, 
-                    fontsize=20)
+        ax3.imshow(bw_image, origin='lower', cmap='gray_r', 
+                   vmin=vmin, vmax=vmax)
 
-        if ell_pars is not None:
-            _draw_ellipse(ra, dec, ell_pars, wcs, ax, dx=dx, dy=dy, 
-                          alpha=0.8, zorder=100)
-
-        if full_cat is not None:
-            ra_c, dec_c = wcs.getSkyOrigin()
-            ra_c = ra_c.asDegrees()
-            dec_c = dec_c.asDegrees()
-            seps = angsep(ra_c, dec_c, full_cat['ra'], full_cat['dec']) 
-            src_cut= seps < 2 * radius
-            sources = full_cat[src_cut]
-            for src in sources:
-                ell_pars = src['flux_radius_ave_g'], src['theta_image'],\
-                           src['ellipticity'], ell_scale
-                _draw_ellipse(src['ra'], src['dec'], ell_pars, wcs, 
-                              ax, color='lightgray', alpha=0.7, zorder=10)
+        ax3.text(0.07, 0.86, single_band, transform=ax3.transAxes, 
+                 color='tab:red', fontsize=22, backgroundcolor='k')
 
         fig.savefig(prefix+'.'+file_format, bbox_inches='tight', 
-                    pad_inches=0, dpi=dpi)
+                    dpi=dpi)
 
         plt.close('all')
-
 
 def _mp_run(obj, extra_args):
     out_path, ellipse_scale, radius = extra_args[:3]
@@ -303,7 +357,7 @@ if __name__=='__main__':
             ra, dec, args.radius, args.output, args.Q, 
             args.dataRange, file_format=args.format, root=args.root, 
             dpi=args.dpi, full_cat=full_cat, tract=args.tract, 
-            patch=args.patch)
+            patch=args.patch, ell_scale=args.ell_scale)
     elif args.batch_fn:
         batch_rgb_images(
             args.batch_fn, args.radius, args.output, args.Q, 

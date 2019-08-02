@@ -1,0 +1,2 @@
+python synth_analysis.py --run-name synth-reds-01 --synth-cat-fn /tigress/jgreco/hsc-s18a/synths/global/catalogs/reds-01.fits --nsa-cut --cirrus-cut --morph-cut --fig-label synth-reds-01
+
