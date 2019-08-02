@@ -1,7 +1,10 @@
 import os
 import numpy as np
 from astropy.table import Table
-from hugs.log import logger
+try:
+    from hugs.log import logger
+except:
+    pass
 
 project_dir = os.path.dirname(os.path.dirname(__file__))
 
@@ -22,6 +25,7 @@ labels = dict(
     m_g = r'$m_g$',
     m_r = r'$m_r$',
     m_i = r'$m_i$',
+    mu_0_g_n1 = r'$\mu_0(g, n=1)\ \mathrm{\left[mag\ arcsec^{-2}\right]}$',
     mu_e_ave_g = r'$\bar{\mu}_\mathrm{eff}(g)\ \mathrm{\left[mag\ arcsec^{-2}\right]}$',
     mu_e_ave_r = r'$\bar{\mu}_\mathrm{eff}(g)\ \mathrm{\left[mag\ arcsec^{-2}\right]}$',
     mu_e_ave_i = r'$\bar{\mu}_\mathrm{eff}(g)\ \mathrm{\left[mag\ arcsec^{-2}\right]}$',
