@@ -163,31 +163,38 @@ def completeness_grid(injected, recovered, measured, x_par, y_par,
 if __name__ == '__main__':
     from argparse import ArgumentParser
 
+    fig_dir = '/Users/jgreco/local-io/figures/hugs-ana'
+    data_path = '/Users/jgreco/local-io/hugs-data/synth-results'
+
     parser = ArgumentParser()
     parser.add_argument('--color', required=True, 
                         help='gal colors: all, reds, blues, med')
+    parser.add_argument('--fig-path', default=fig_dir)
+    parser.add_argument('--data-path', default=data_path)
+    parser.add_argument('--label', default='')
     args = parser.parse_args()
 
-    data_path = '/Users/jgreco/local-io/hugs-data/synth-results'
-    fig_dir = '/Users/jgreco/local-io/figures/hugs-ana'
-
     num_runs = 3
+    fig_dir = args.fig_path
+    data_path = args.data_path
+
+    label = '-{}'.format(args.label) if args.label != '' else ''
 
     if args.color == 'all':
         galcolors = ['blues', 'med', 'reds']
-        fig_label = 'all-synths'
+        fig_label = 'all-synths' + label
         cmap = 'Purples'
     elif args.color == 'reds':
         galcolors = ['reds']
-        fig_label = 'red-synths'
+        fig_label = 'red-synths' + label
         cmap = 'Reds'
     elif args.color == 'blues':
         galcolors = ['blues']
-        fig_label = 'blue-synths'
+        fig_label = 'blue-synths' + label
         cmap = 'Blues'
     elif args.color == 'med':
         galcolors = ['med']
-        fig_label = 'med-synths'
+        fig_label = 'med-synths' + label
         cmap = 'Greens'
     else:
         raise Exception('not a valid color (reds, blues, med, all)')
